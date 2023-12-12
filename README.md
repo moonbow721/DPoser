@@ -1,6 +1,6 @@
 # 🌟 DPoser: Diffusion Model as Robust 3D Human Pose Prior 🌟
 
-### [🔗 Project Page](https://dposer.github.io/) | [🎥 Video](https://youtu.be/tbi8nwTaV3M) | [📄 Paper]
+### [🔗 Project Page](https://dposer.github.io/) | [🎥 Video](https://youtu.be/tbi8nwTaV3M) | [📄 Paper](https://arxiv.org/abs/2312.05541)
 #### Authors
 [Junzhe Lu](https://scholar.google.com/citations?user=hnJ4NIYAAAAJ), [Jing Lin](https://jinglin7.github.io), [Hongkun Dou](https://scholar.google.com/citations?user=pSNEkEwAAAAJ), [Yulun Zhang](https://yulunzhang.com/), [Yue Deng](https://shi.buaa.edu.cn/yuedeng/en/index.htm), [Haoqian Wang](https://www.sigs.tsinghua.edu.cn/whq_en/main.htm)  
 
@@ -153,5 +153,10 @@ Big thanks to [ScoreSDE](https://github.com/yang-song/score_sde_pytorch), [GFPos
 ## 📚 Reference  
 
 ```
-
+@article{lu2023dposer,
+  title={DPoser: Diffusion Model as Robust 3D Human Pose Prior},
+  author={Lu, Junzhe and Lin, Jing and Dou, Hongkun and Zhang, Yulun and Deng, Yue and Wang, Haoqian},
+  journal={arXiv preprint arXiv:2312.05541},
+  year={2023}
+}
 ```
