@@ -111,12 +111,14 @@ def get_sde_loss_fn(sde, train, reduce_mean=False, continuous=True, likelihood_w
         z = torch.randn_like(batch)  # [B, j*3]
         mean, std = sde.marginal_prob(batch, t)
         perturbed_data = mean + std[:, None] * z  # [B, j*3]
-        # score = score_fn(perturbed_data, t, condition, mask)
 
-        # return estimated clean sample for auxiliary loss
-        alpha, sigma = sde.return_alpha_sigma(t)
-        SNR = alpha / sigma[:, None]
-        score, estimated_data = multi_step_denoise(perturbed_data, t, t_end=t/(2*denoise_steps), N=denoise_steps)
+        if return_data:
+            # return estimated clean sample for auxiliary loss
+            alpha, sigma = sde.return_alpha_sigma(t)
+            SNR = alpha / sigma[:, None]
+            score, estimated_data = multi_step_denoise(perturbed_data, t, t_end=t/(2*denoise_steps), N=denoise_steps)
+        else:
+            score = score_fn(perturbed_data, t, condition, mask)
 
         if not likelihood_weighting:
             losses = torch.square(score * std[:, None] + z)  # [B, j*3]
@@ -127,10 +129,10 @@ def get_sde_loss_fn(sde, train, reduce_mean=False, continuous=True, likelihood_w
             losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1) * g2
 
         loss = torch.mean(losses)
-        if not return_data:
-            return loss
-        else:
+        if return_data:
             return loss, {'clean_sample': estimated_data, 'SNR': SNR, 't': t}
+        else:
+            return loss
 
     return loss_fn
 
