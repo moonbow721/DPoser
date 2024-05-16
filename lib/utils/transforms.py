@@ -196,16 +196,9 @@ def estimate_focal_length(img_h, img_w):
 
 def rot6d_to_axis_angle(rot6d):
     """Convert 6d rotation representation to 3d vector of axis-angle rotation.
-
-    Args:
-        angle_axis (Tensor): tensor of 3d vector of axis-angle rotations.
-
-    Returns:
-        Tensor: tensor of 3d vector of axis-angle rotation.
-
     Shape:
-        - Input: :math:`(N, 6)`
-        - Output: :math:`(N, 3)`
+        - Input: :Torch:`(N, 6)`
+        - Output: :Torch:`(N, 3)`
     """
     batch_size = rot6d.shape[0]
 
@@ -225,6 +218,12 @@ def rot6d_to_axis_angle(rot6d):
 
 
 def rot6d_to_mat3x3(rot6d):
+    """
+    Convert 6d rotation representation to 3x3 rotation matrix.
+    Shape:
+        - Input: :Torch:`(N, 6)`
+        - Output: :Torch:`(N, 3, 3)`
+    """
     rot6d = rot6d.view(-1, 3, 2)
     a1 = rot6d[:, :, 0]
     a2 = rot6d[:, :, 1]
@@ -237,16 +236,9 @@ def rot6d_to_mat3x3(rot6d):
 
 def axis_angle_to_rot6d(angle_axis):
     """Convert 3d vector of axis-angle rotation to 6d rotation representation.
-
-    Args:
-        angle_axis (Tensor): tensor of 3d vector of axis-angle rotations.
-
-    Returns:
-        Tensor: tensor of 6d rotation representation.
-
     Shape:
-        - Input: :math:`(N, 3)`
-        - Output: :math:`(N, 6)`
+        - Input: :Torch:`(N, 3)`
+        - Output: :Torch:`(N, 6)`
     """
     rot_mat = tgm.angle_axis_to_rotation_matrix(angle_axis)  # 4x4 rotation matrix
     rot6d = rot_mat[:, :3, :2]
@@ -256,9 +248,116 @@ def axis_angle_to_rot6d(angle_axis):
 
 
 def axis_angle_to_mat3x3(angle_axis):
+    """
+    Convert 3d vector of axis-angle rotation to 3x3 rotation matrix.
+    Shape:
+        - Input: :Torch:`(N, 3)`
+        - Output: :Torch:`(N, 3, 3)`
+    """
     rot_mat = tgm.angle_axis_to_rotation_matrix(angle_axis)  # 4x4 rotation matrix
 
     return rot_mat[:, :3, :3]
+
+
+def axis_angle_to_quaternion(angle_axis):
+    """
+    Convert 3d vector of axis-angle rotation to 4d quaternion.
+    Shape:
+        - Input: :Torch:`(..., 3)`
+        - Output: :Torch:`(..., 4)`
+    """
+    quaternion = tgm.angle_axis_to_quaternion(angle_axis)
+    return quaternion
+
+
+def mat3x3_to_axis_angle(rot_mat):
+    """
+    Convert 3x3 rotation matrix to 3d vector of axis-angle rotation.
+    Shape:
+        - Input: :Torch:`(N, 3, 3)`
+        - Output: :Torch:`(N, 3)`
+    """
+    rot_mat = torch.cat([rot_mat, torch.zeros((rot_mat.shape[0], 3, 1), device=rot_mat.device).float()], 2)
+    axis_angle = tgm.rotation_matrix_to_angle_axis(rot_mat).reshape(-1, 3)  # axis-angle
+    axis_angle[torch.isnan(axis_angle)] = 0.0
+    return axis_angle
+
+
+def flip_orientations(global_orient):
+    """
+    Flips the global orientation vectors around the Y axis by 180 degrees, mirroring the direction.
+
+    The function converts rotation vectors to rotation matrices, applies a 180-degree rotation around the Y axis,
+    and then converts the matrices back to rotation vectors.
+
+    Shape:
+        - Input: :Torch:`(N, 3)` where `N` is the batch size, and each row is a 3D rotation vector.
+        - Output: :Torch:`(N, 3)` where each row is the flipped 3D rotation vector corresponding to the input.
+
+    Parameters:
+        - global_orient (:Torch:`Tensor`): The input batch of 3D rotation vectors.
+
+    Returns:
+        - :Torch:`Tensor`: A tensor of the same shape as `global_orient`, representing the flipped orientations.
+    """
+    # Convert rotation vectors to rotation matrices
+    rotation_matrices = tgm.angle_axis_to_rotation_matrix(global_orient)
+
+    # Define 180-degree rotation matrix around Y axis
+    cos_angle, sin_angle = torch.cos(torch.tensor(np.pi)), torch.sin(torch.tensor(np.pi))
+    y_rot_matrix = torch.tensor([[cos_angle.item(), 0, sin_angle.item(), 0],
+                                 [0, 1, 0, 0],
+                                 [-sin_angle.item(), 0, cos_angle.item(), 0],
+                                 [0, 0, 0, 1]], device=global_orient.device)
+
+    # Expand Y rotation matrix for batch size
+    y_rot_matrix_batch = y_rot_matrix.unsqueeze(0).repeat(global_orient.size(0), 1, 1)
+
+    # Apply Y rotation to each rotation matrix
+    flipped_matrices = torch.matmul(rotation_matrices, y_rot_matrix_batch)[:, :3, :]
+
+    # Convert rotation matrices back to rotation vectors
+    flipped_orient = tgm.rotation_matrix_to_angle_axis(flipped_matrices)
+
+    # Return the adjusted rotation vectors
+    return flipped_orient[:, :3]
+
+
+def correct_orientation(global_orient):
+    # Convert rotation vectors to rotation matrices
+    rotation_matrices = tgm.angle_axis_to_rotation_matrix(global_orient)
+
+    # Define 180-degree rotation matrix around Y axis
+    cos_angle, sin_angle = torch.cos(torch.tensor(np.pi)), torch.sin(torch.tensor(np.pi))
+    y_rot_matrix = torch.tensor([[cos_angle.item(), 0, sin_angle.item(), 0],
+                                 [0, 1, 0, 0],
+                                 [-sin_angle.item(), 0, cos_angle.item(), 0],
+                                 [0, 0, 0, 1]], device=global_orient.device).unsqueeze(0).repeat(global_orient.size(0),
+                                                                                                 1, 1)
+
+    # Rotation matrix around the X axis
+    x_rot_matrix = torch.tensor([[1, 0, 0, 0],
+                                 [0, cos_angle.item(), -sin_angle.item(), 0],
+                                 [0, sin_angle.item(), cos_angle.item(), 0],
+                                 [0, 0, 0, 1]], device=global_orient.device).unsqueeze(0).repeat(global_orient.size(0),
+                                                                                                 1, 1)
+    # Rotation matrix around the Z axis
+    z_rot_matrix = torch.tensor([[cos_angle.item(), -sin_angle.item(), 0, 0],
+                                 [sin_angle.item(), cos_angle.item(), 0, 0],
+                                 [0, 0, 1, 0],
+                                 [0, 0, 0, 1]], device=global_orient.device).unsqueeze(0).repeat(global_orient.size(0),
+                                                                                                 1, 1)
+    # Apply Y rotation to each rotation matrix
+    combined_rot_matrix = torch.matmul(y_rot_matrix, z_rot_matrix)
+    print(combined_rot_matrix)
+    flipped_matrices = torch.matmul(rotation_matrices, combined_rot_matrix)[:, :3, :]
+    # flipped_matrices = torch.matmul(combined_rot_matrix, y_rot_matrix)[:, :3, :]
+
+    # Convert rotation matrices back to rotation vectors
+    flipped_orient = tgm.rotation_matrix_to_angle_axis(flipped_matrices)
+
+    # Return the adjusted rotation vectors
+    return flipped_orient[:, :3]
 
 
 def rigid_transform_3D(A, B):
@@ -286,6 +385,15 @@ def rigid_align(A, B):
     return A2
 
 
+def batch_rigid_align(A, B):
+    assert A.shape == B.shape
+    batchsize = A.shape[0]
+    A2 = np.zeros_like(A)
+    for i in range(batchsize):
+        A2[i] = rigid_align(A[i], B[i])
+    return A2
+
+
 def rotate_points(points, rotation_matrix):
     return np.dot(points, rotation_matrix.T)
 
@@ -310,3 +418,25 @@ def get_rotation_matrix_y(angle):
         [0, 1, 0],
         [-np.sin(angle), 0, np.cos(angle)]
     ])
+
+
+def get_focal_pp(K):
+    """ Extract the camera parameters that are relevant for an orthographic assumption. """
+    focal = 0.5 * (K[0, 0] + K[1, 1])
+    pp = K[:2, 2]
+    return focal, pp
+
+
+def get_default_camera(img_w, img_h, ):
+    focal = estimate_focal_length(img_h, img_w)
+    pp = [torch.div(img_w, 2, rounding_mode='trunc'),
+          torch.div(img_h, 2, rounding_mode='trunc')]
+    return focal, pp
+
+
+if __name__ == '__main__':
+    mat3x3 = torch.tensor([[[0.8814, 0.1081, -0.4599],
+                            [-0.2036, 0.9653, -0.1633],
+                            [0.4263, 0.2375, 0.8728]]], device='cuda:0', requires_grad=True)
+    axis_angle = mat3x3_to_axis_angle(mat3x3)
+    print(axis_angle)

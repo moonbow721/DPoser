@@ -1,0 +1,67 @@
+data:
+  data_dir: ./posendf_data/ # Training data directory
+  sample_pt: 100000
+  dc: dc
+#  sample_distribution: [0.4, 0.2, 0.1, 0.1,  0.1, 0.1] #, 0.025, 0.05, 0.05, 0.05]
+#  sample_sigmas: [0, 0.001, 0.005, 0.01, 0.02, 0.04 ] #, 0.08, 0.1, 0.15, 0.4]
+#  sample_distribution: [ 0.35, 0.2, 0.1, 0.1,  0.05, 0.025, 0.025, 0.05, 0.05, 0.05 ]
+#  sample_sigmas: [ 0, 0.001, 0.005, 0.01, 0.02, 0.04, 0.08, 0.1, 0.1, 0.4 ]
+  sample_distribution: [0.5, 0.5]
+  sample_sigmas: [ 0.0, 0.001]
+experiment:
+  bodymodel: smpl
+  root_dir: /BS/humanpose/static00/pose_manifold/amass # Where to save checkpoints and final trained model_quat #todo
+  data_name: PoseData
+  type: BaseTrainer
+  inp_name: xyz
+  exp_name: main
+  num_part: 21
+  val: False
+  test: False
+
+model:
+  DFNet:
+    name: 'DFNet'
+    total_dim: 960
+    in_dim: 126
+    num_parts: 21
+    num_layers: 5
+    ff_enc: False
+    dims: [ 256, 512, 1024, 512, 256, 64 ]
+    act: lrelu
+    beta: 100
+  StrEnc:
+    use: True
+    name: 'StructureEncoder'
+    out_dim: 6
+    in_dim: 84
+    num_part: 21
+    pose_enc: False #todo
+    num_layers: 2
+    ff_enc: False
+    act: lrelu
+    beta: 100
+train:
+  pde: False
+  device: cuda
+  batch_size: 4
+  continue_train: true
+  optimizer: Adam
+  optimizer_param: 0.00001 #1e-4  #1e-4 for lr and 0.9 for momentum
+  eval: False
+  num_worker: 30
+  max_epoch: 200000
+  loss_type: l1   #todo
+  clamp_dist: 0.0  # 2dsphere data is prepared in such way
+  man_loss: 1.0
+  dist: 1.0
+  eikonal: 1.0
+  body_enc: true
+  disp_reg: true
+  grad: false
+  train_stage_1: 100000  #pretrain weight prediction
+  train_stage_2: 100000  #freeze weight prediction
+  square: False
+  abs: True
+
+

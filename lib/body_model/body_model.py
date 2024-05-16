@@ -1,7 +1,10 @@
+import pickle
+
 import numpy as np
 import torch
 import torch.nn as nn
 from smplx import SMPL, SMPLH, SMPLX
+from smplx import joint_names
 from smplx.utils import Struct
 
 
@@ -15,8 +18,9 @@ class BodyModel(nn.Module):
                  bm_path,
                  num_betas=10,
                  batch_size=1,
-                 num_expressions=10,
-                 model_type='smplx'):
+                 num_expressions=100,
+                 model_type='smplh',
+                 regressor_path=None):
         super(BodyModel, self).__init__()
         '''
         Creates the body model object at the given path.
@@ -33,7 +37,7 @@ class BodyModel(nn.Module):
             'batch_size': batch_size,
             'num_expression_coeffs': num_expressions,
             'use_pca': False,
-            'flat_hand_mean': True
+            'flat_hand_mean': False,
         }
 
         assert (model_type in ['smpl', 'smplh', 'smplx'])
@@ -62,27 +66,49 @@ class BodyModel(nn.Module):
             self.num_joints = SMPLX.NUM_JOINTS
 
         self.model_type = model_type
+
+        if regressor_path is not None:
+            for model_path in regressor_path:
+                if 'SMPLX_to_J14.pkl' in model_path:
+                    with open(model_path, 'rb') as f:
+                        # Hand4Whole use it to evalute the EHF dataset
+                        self.j14_regressor = pickle.load(f, encoding='latin1')
+                elif 'J_regressor_h36m.npy' in model_path:
+                    # Use it to evaluate GFPose trained on H36M
+                    self.j17_regressor = np.load(model_path)
+
         self.J_regressor = self.bm.J_regressor.numpy()
         self.J_regressor_idx = {'pelvis': 0, 'lwrist': 20, 'rwrist': 21, 'neck': 12}
 
-    def forward(self, root_orient=None, pose_body=None, pose_hand=None, pose_jaw=None, pose_eye=None, betas=None,
-                trans=None, dmpls=None, expression=None, return_dict=False, **kwargs):
+    def forward(self, global_orient=None, body_pose=None, left_hand_pose=None, right_hand_pose=None,
+                jaw_pose=None, eye_poses=None, expression=None, betas=None, trans=None, dmpls=None,
+                whole_body_params=None, return_dict=False, **kwargs):
         '''
         Note dmpls are not supported.
         '''
         assert (dmpls is None)
+        assert 'pose_body' not in kwargs, 'use body_pose instead of pose_body'
+
+        if whole_body_params is not None:  # [batchsize, 63+90+3+100], body, two_hands, jaw, expression
+            assert (self.model_type == 'smplx')
+            body_pose = whole_body_params[:, :63]
+            left_hand_pose = whole_body_params[:, 63:63 + 45]
+            right_hand_pose = whole_body_params[:, 63 + 45:63 + 45 + 45]
+            jaw_pose = whole_body_params[:, 63 + 90:63 + 90 + 3]
+            expression = whole_body_params[:, 63 + 90 + 3:]
+
         # parameters of SMPL should not be updated
         out_obj = self.bm(
             betas=betas,
-            global_orient=root_orient,
-            body_pose=pose_body,
-            left_hand_pose=None if pose_hand is None else pose_hand[:, :(SMPLH.NUM_HAND_JOINTS * 3)],
-            right_hand_pose=None if pose_hand is None else pose_hand[:, (SMPLH.NUM_HAND_JOINTS * 3):],
+            global_orient=global_orient,
+            body_pose=body_pose,
+            left_hand_pose=left_hand_pose,
+            right_hand_pose=right_hand_pose,
             transl=trans,
             expression=expression,
-            jaw_pose=pose_jaw,
-            leye_pose=None if pose_eye is None else pose_eye[:, :3],
-            reye_pose=None if pose_eye is None else pose_eye[:, 3:],
+            jaw_pose=jaw_pose,
+            leye_pose=None if eye_poses is None else eye_poses[:, :3],
+            reye_pose=None if eye_poses is None else eye_poses[:, 3:],
             return_full_pose=True,
             **kwargs
         )
@@ -93,18 +119,14 @@ class BodyModel(nn.Module):
             'betas': out_obj.betas,
             'Jtr': out_obj.joints,
             'body_joints': out_obj.joints[:22],  # only body joints
-            'pose_body': out_obj.body_pose,
+            'body_pose': out_obj.body_pose,
             'full_pose': out_obj.full_pose
         }
         if self.model_type in ['smplh', 'smplx']:
-            out['pose_hand'] = torch.cat([out_obj.left_hand_pose, out_obj.right_hand_pose], dim=-1)
+            out['hand_poses'] = torch.cat([out_obj.left_hand_pose, out_obj.right_hand_pose], dim=-1)
         if self.model_type == 'smplx':
-            out['pose_jaw'] = out_obj.jaw_pose
-            out['pose_eye'] = pose_eye
-
-        # if not self.use_vtx_selector:
-        #     # don't need extra joints
-        #     out['Jtr'] = out['Jtr'][:, :self.num_joints + 1]  # add one for the root
+            out['jaw_pose'] = out_obj.jaw_pose
+            out['eye_poses'] = eye_poses
 
         if not return_dict:
             out = Struct(**out)

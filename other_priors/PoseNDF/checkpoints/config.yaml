@@ -1,0 +1,60 @@
+data:
+  amass_dir: /BS/humanpose/static00/data/PoseNDF_train/amass_smpl_h
+  data_dir: /BS/humanpose/static00/data/PoseNDF_train/smpl_h_flips
+  flip: true
+  num_pts: 10000
+  single: false
+experiment:
+  bodymodel: smpl
+  data_name: PoseData
+  exp_name: small
+  inp_name: single
+  num_part: 21
+  root_dir: /BS/humanpose/static00/pose_manifold/amass_flip_test
+  test: false
+  type: BaseTrainer
+  val: false
+model:
+  DFNet:
+    act: softplus
+    beta: 100
+    dims: 256, 512, 1024, 512, 256, 64
+    ff_enc: false
+    in_dim: 126
+    name: DFNet
+    num_layers: 5
+    num_parts: 21
+    total_dim: 960
+  StrEnc:
+    act: softplus
+    beta: 100
+    ff_enc: false
+    in_dim: 84
+    name: StructureEncoder
+    num_layers: 2
+    num_part: 21
+    out_dim: 6
+    pose_enc: false
+    use: true
+train:
+  abs: true
+  batch_size: 4
+  body_enc: true
+  clamp_dist: 0.0
+  continue_train: true
+  device: cuda
+  disp_reg: true
+  dist: 0.5
+  eikonal: 0.1
+  eval: false
+  grad: false
+  loss_type: l1
+  man_loss: 0.1
+  max_epoch: 200000
+  num_worker: 30
+  optimizer: Adam
+  optimizer_param: 1.0e-05
+  pde: false
+  square: false
+  train_stage_1: 100000
+  train_stage_2: 100000

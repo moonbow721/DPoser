@@ -7,7 +7,7 @@ import numpy as np
 # From https://github.com/vchoutas/smplx/blob/main/smplx/joint_names.py
 # Please see license for usage restrictions.
 #
-# SMPLX body poses (exclude "left_hand" and "right_hand" in SMPL, 21poses)
+# SMPLX body poses (exclude "left_hand" and "right_hand" in SMPL, 21 local poses)
 BODY_JOINT_NAMES = [
     "pelvis",  # global_orient actually
     "left_hip",
@@ -32,149 +32,97 @@ BODY_JOINT_NAMES = [
     "left_wrist",
     "right_wrist",
 ]
-#  exclude the "pelvis" joint
-name_to_index = {name: index - 1 for index, name in enumerate(BODY_JOINT_NAMES)}
+
+body_name_to_index = {name: index - 1 for index, name in enumerate(BODY_JOINT_NAMES)}
 
 
 class BodyPartIndices:
-    left_leg = sorted([name_to_index[name] for name in ["left_hip", "left_knee", "left_ankle", "left_foot"]])
-    right_leg = sorted([name_to_index[name] for name in ["right_hip", "right_knee", "right_ankle", "right_foot"]])
-    left_arm = sorted([name_to_index[name] for name in ["left_collar", "left_shoulder", "left_elbow", "left_wrist"]])
-    right_arm = sorted([name_to_index[name] for name in ["right_collar", "right_shoulder", "right_elbow", "right_wrist"]])
-    trunk = sorted([name_to_index[name] for name in ["spine1", "spine2", "spine3", "left_shoulder", "right_shoulder"]])
-    hands = sorted([name_to_index[name] for name in ["left_wrist", "right_wrist"]])
+    left_leg = sorted([body_name_to_index[name] for name in ["left_hip", "left_knee", "left_ankle", "left_foot"]])
+    right_leg = sorted([body_name_to_index[name] for name in ["right_hip", "right_knee", "right_ankle", "right_foot"]])
+    left_arm = sorted(
+        [body_name_to_index[name] for name in ["left_collar", "left_shoulder", "left_elbow", "left_wrist"]])
+    right_arm = sorted(
+        [body_name_to_index[name] for name in ["right_collar", "right_shoulder", "right_elbow", "right_wrist"]])
+    trunk = sorted(
+        [body_name_to_index[name] for name in ["spine1", "spine2", "spine3", "left_shoulder", "right_shoulder"]])
+    hands = sorted([body_name_to_index[name] for name in ["left_wrist", "right_wrist"]])
     legs = sorted(left_leg + right_leg)
     arms = sorted(left_arm + right_arm)
+    left_body = sorted(left_leg + left_arm)
+    right_body = sorted(right_leg + right_arm)
+
+    @staticmethod
+    def get_indices(part_name):
+        return getattr(BodyPartIndices, part_name)
 
 
 class BodySegIndices:
     current_file_path = os.path.abspath(__file__)
-    segmentdata = json.load(open(os.path.join(os.path.dirname(current_file_path), 'smplx_vert_segmentation.json')))
+    segmentdata = json.load(
+        open(os.path.join(os.path.dirname(current_file_path), '../data/smplx_vert_segmentation.json')))
 
-    left_leg = sorted(list(set(segmentdata['leftLeg'] + segmentdata['leftUpLeg'] + segmentdata['leftFoot'] + segmentdata['leftToeBase'])))
-    right_leg = sorted(list(set(segmentdata['rightLeg'] + segmentdata['rightUpLeg'] + segmentdata['rightFoot'] + segmentdata['rightToeBase'])))
+    left_leg = sorted(list(
+        set(segmentdata['leftLeg'] + segmentdata['leftUpLeg'] + segmentdata['leftFoot'] + segmentdata['leftToeBase'])))
+    right_leg = sorted(list(set(
+        segmentdata['rightLeg'] + segmentdata['rightUpLeg'] + segmentdata['rightFoot'] + segmentdata['rightToeBase'])))
     left_arm = sorted(list(set(segmentdata['leftArm'] + segmentdata['leftForeArm'])))
     right_arm = sorted(list(set(segmentdata['rightArm'] + segmentdata['rightForeArm'])))
-    trunk = sorted(list(set(segmentdata['spine1'] + segmentdata['spine2'] + segmentdata['leftShoulder'] + segmentdata['rightShoulder'])))
+    trunk = sorted(list(set(
+        segmentdata['spine1'] + segmentdata['spine2'] + segmentdata['leftShoulder'] + segmentdata['rightShoulder'])))
     hands = sorted(list(set(segmentdata['leftHand'] + segmentdata['rightHand'])))
     legs = sorted(list(set(left_leg + right_leg)))
     arms = sorted(list(set(left_arm + right_arm)))
 
 
-#
-# From https://github.com/vchoutas/smplify-x/blob/master/smplifyx/utils.py
-# Please see license for usage restrictions.
-#
-def smpl_to_openpose(model_type='smplx', use_hands=True, use_face=True,
-                     use_face_contour=False, openpose_format='coco25'):
-    ''' Returns the indices of the permutation that maps SMPL to OpenPose
+# MANO right hand poses (15+1 poses)
+HAND_JOINT_NAMES = [
+    "right_wrist",  # global_orient actually
+    'right_index1',
+    'right_index2',
+    'right_index3',
+    'right_middle1',
+    'right_middle2',
+    'right_middle3',
+    'right_pinky1',
+    'right_pinky2',
+    'right_pinky3',
+    'right_ring1',
+    'right_ring2',
+    'right_ring3',
+    'right_thumb1',
+    'right_thumb2',
+    'right_thumb3',
+]
 
-        Parameters
-        ----------
-        model_type: str, optional
-            The type of SMPL-like model that is used. The default mapping
-            returned is for the SMPLX model
-        use_hands: bool, optional
-            Flag for adding to the returned permutation the mapping for the
-            hand keypoints. Defaults to True
-        use_face: bool, optional
-            Flag for adding to the returned permutation the mapping for the
-            face keypoints. Defaults to True
-        use_face_contour: bool, optional
-            Flag for appending the facial contour keypoints. Defaults to False
-        openpose_format: bool, optional
-            The output format of OpenPose. For now only COCO-25 and COCO-19 is
-            supported. Defaults to 'coco25'
+hand_name_to_index = {name: index - 1 for index, name in enumerate(HAND_JOINT_NAMES)}
 
-    '''
-    if openpose_format.lower() == 'coco25':
-        if model_type == 'smpl':
-            return np.array([24, 12, 17, 19, 21, 16, 18, 20, 0, 2, 5, 8, 1, 4,
-                             7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-                            dtype=np.int32)
-        elif model_type == 'smplh':
-            body_mapping = np.array([52, 12, 17, 19, 21, 16, 18, 20, 0, 2, 5,
-                                     8, 1, 4, 7, 53, 54, 55, 56, 57, 58, 59,
-                                     60, 61, 62], dtype=np.int32)
-            mapping = [body_mapping]
-            if use_hands:
-                lhand_mapping = np.array([20, 34, 35, 36, 63, 22, 23, 24, 64,
-                                          25, 26, 27, 65, 31, 32, 33, 66, 28,
-                                          29, 30, 67], dtype=np.int32)
-                rhand_mapping = np.array([21, 49, 50, 51, 68, 37, 38, 39, 69,
-                                          40, 41, 42, 70, 46, 47, 48, 71, 43,
-                                          44, 45, 72], dtype=np.int32)
-                mapping += [lhand_mapping, rhand_mapping]
-            return np.concatenate(mapping)
-        # SMPLX
-        elif model_type == 'smplx':
-            body_mapping = np.array([55, 12, 17, 19, 21, 16, 18, 20, 0, 2, 5,
-                                     8, 1, 4, 7, 56, 57, 58, 59, 60, 61, 62,
-                                     63, 64, 65], dtype=np.int32)
-            mapping = [body_mapping]
-            if use_hands:
-                lhand_mapping = np.array([20, 37, 38, 39, 66, 25, 26, 27,
-                                          67, 28, 29, 30, 68, 34, 35, 36, 69,
-                                          31, 32, 33, 70], dtype=np.int32)
-                rhand_mapping = np.array([21, 52, 53, 54, 71, 40, 41, 42, 72,
-                                          43, 44, 45, 73, 49, 50, 51, 74, 46,
-                                          47, 48, 75], dtype=np.int32)
 
-                mapping += [lhand_mapping, rhand_mapping]
-            if use_face:
-                #  end_idx = 127 + 17 * use_face_contour
-                face_mapping = np.arange(76, 127 + 17 * use_face_contour,
-                                         dtype=np.int32)
-                mapping += [face_mapping]
+class HandPartIndices:
+    thumb = sorted([hand_name_to_index[name] for name in ['right_thumb1', 'right_thumb2', 'right_thumb3']])
+    index_finger = sorted([hand_name_to_index[name] for name in ['right_index1', 'right_index2', 'right_index3']])
+    middle_finger = sorted([hand_name_to_index[name] for name in ['right_middle1', 'right_middle2', 'right_middle3']])
+    ring_finger = sorted([hand_name_to_index[name] for name in ['right_ring1', 'right_ring2', 'right_ring3']])
+    pinky_finger = sorted([hand_name_to_index[name] for name in ['right_pinky1', 'right_pinky2', 'right_pinky3']])
 
-            return np.concatenate(mapping)
-        else:
-            raise ValueError('Unknown model type: {}'.format(model_type))
-    elif openpose_format == 'coco19':
-        if model_type == 'smpl':
-            return np.array([24, 12, 17, 19, 21, 16, 18, 20, 0, 2, 5, 8,
-                             1, 4, 7, 25, 26, 27, 28],
-                            dtype=np.int32)
-        elif model_type == 'smplh':
-            body_mapping = np.array([52, 12, 17, 19, 21, 16, 18, 20, 0, 2, 5,
-                                     8, 1, 4, 7, 53, 54, 55, 56],
-                                    dtype=np.int32)
-            mapping = [body_mapping]
-            if use_hands:
-                lhand_mapping = np.array([20, 34, 35, 36, 57, 22, 23, 24, 58,
-                                          25, 26, 27, 59, 31, 32, 33, 60, 28,
-                                          29, 30, 61], dtype=np.int32)
-                rhand_mapping = np.array([21, 49, 50, 51, 62, 37, 38, 39, 63,
-                                          40, 41, 42, 64, 46, 47, 48, 65, 43,
-                                          44, 45, 66], dtype=np.int32)
-                mapping += [lhand_mapping, rhand_mapping]
-            return np.concatenate(mapping)
-        # SMPLX
-        elif model_type == 'smplx':
-            body_mapping = np.array([55, 12, 17, 19, 21, 16, 18, 20, 0, 2, 5,
-                                     8, 1, 4, 7, 56, 57, 58, 59],
-                                    dtype=np.int32)
-            mapping = [body_mapping]
-            if use_hands:
-                lhand_mapping = np.array([20, 37, 38, 39, 60, 25, 26, 27,
-                                          61, 28, 29, 30, 62, 34, 35, 36, 63,
-                                          31, 32, 33, 64], dtype=np.int32)
-                rhand_mapping = np.array([21, 52, 53, 54, 65, 40, 41, 42, 66,
-                                          43, 44, 45, 67, 49, 50, 51, 68, 46,
-                                          47, 48, 69], dtype=np.int32)
+    @staticmethod
+    def get_indices(part_name):
+        # e.g. part_name = 'index_middle_finger'
+        finger_names = part_name.split('_')
+        indices = []
 
-                mapping += [lhand_mapping, rhand_mapping]
-            if use_face:
-                face_mapping = np.arange(70, 70 + 51 +
-                                         17 * use_face_contour,
-                                         dtype=np.int32)
-                mapping += [face_mapping]
+        for finger in finger_names:
+            if finger == 'index':
+                indices.extend(HandPartIndices.index_finger)
+            elif finger == 'middle':
+                indices.extend(HandPartIndices.middle_finger)
+            elif finger == 'pinky':
+                indices.extend(HandPartIndices.pinky_finger)
+            elif finger == 'ring':
+                indices.extend(HandPartIndices.ring_finger)
+            elif finger == 'thumb':
+                indices.extend(HandPartIndices.thumb)
 
-            return np.concatenate(mapping)
-        else:
-            raise ValueError('Unknown model type: {}'.format(model_type))
-    else:
-        raise ValueError('Unknown joint format: {}'.format(openpose_format))
+        return sorted(set(indices))
 
 
 def get_smpl_skeleton():
@@ -203,3 +151,152 @@ def get_smpl_skeleton():
             [19, 21]
         ]
     )
+
+
+def get_openpose_skeleton():
+    return np.array(
+        [
+            [0, 1],
+            [1, 2],
+            [1, 5],
+            [2, 3],
+            [3, 4],
+            [5, 6],
+            [6, 7],
+            [1, 8],
+            [8, 9],
+            [9, 10],
+            [10, 11],
+            [11, 24],
+            [11, 22],
+            [22, 23],
+            [8, 12],
+            [12, 13],
+            [13, 14],
+            [14, 21],
+            [14, 19],
+            [19, 20],
+            [0, 15],
+            [0, 16],
+            [15, 17],
+            [16, 18]
+        ]
+    )
+
+
+def get_mano_skeleton():
+    skeleton = []
+    wrist_index = 0
+
+    for finger_start in range(1, len(HAND_JOINT_NAMES), 3):
+        skeleton.append([wrist_index, finger_start])
+        skeleton.append([finger_start, finger_start + 1])
+        skeleton.append([finger_start + 1, finger_start + 2])
+
+    return np.array(skeleton)
+
+
+def get_openpose_hand_skeleton():
+    skeleton = []
+    wrist_index = 0
+
+    for finger_start in range(1, 21, 4):
+        skeleton.append([wrist_index, finger_start])
+        skeleton.append([finger_start, finger_start + 1])
+        skeleton.append([finger_start + 1, finger_start + 2])
+        skeleton.append([finger_start + 2, finger_start + 3])
+
+    return np.array(skeleton)
+
+
+def get_openpose_face_skeleton():
+    skeleton = []
+    current_index = 0
+
+    # Face contour
+    face_contour = 17
+    for i in range(face_contour - 1):
+        skeleton.append([current_index + i, current_index + i + 1])
+
+    current_index += face_contour
+
+    # Left eyebrow
+    left_eyebrow = 5
+    for i in range(left_eyebrow - 1):
+        skeleton.append([current_index + i, current_index + i + 1])
+
+    current_index += left_eyebrow
+
+    # Right eyebrow
+    right_eyebrow = 5
+    for i in range(right_eyebrow - 1):
+        skeleton.append([current_index + i, current_index + i + 1])
+
+    current_index += right_eyebrow
+
+    # Nose bridge to nose tip
+    nose = 4
+    for i in range(nose - 1):
+        skeleton.append([current_index + i, current_index + i + 1])
+
+    current_index += nose
+
+    # upper lip
+    lip = 5
+    for i in range(lip - 1):
+        skeleton.append([current_index + i, current_index + i + 1])
+
+    current_index += lip
+
+    # Left eye, closed contour
+    left_eye = 6
+    for i in range(left_eye):
+        skeleton.append([current_index + i, current_index + (i + 1) % left_eye])
+
+    current_index += left_eye
+
+    # Right eye, closed contour
+    right_eye = 6
+    for i in range(right_eye):
+        skeleton.append([current_index + i, current_index + (i + 1) % right_eye])
+
+    current_index += right_eye
+
+    # Outer mouth, closed contour
+    outer_mouth = 12
+    for i in range(outer_mouth):
+        skeleton.append([current_index + i, current_index + (i + 1) % outer_mouth])
+
+    current_index += outer_mouth
+
+    # Inner mouth, closed contour
+    inner_mouth = 8
+    for i in range(inner_mouth):
+        skeleton.append([current_index + i, current_index + (i + 1) % inner_mouth])
+
+    return np.array(skeleton)
+
+
+def merge_skeleton(skeletons):
+    """
+    Merges multiple skeletons by adjusting the indices of keypoints in subsequent skeletons
+    to ensure continuity and correctness of the merged skeleton.
+
+    :param skeletons: A list of skeletons, where each skeleton is an array of [pointA, pointB] pairs.
+    :return: A merged skeleton as an array of [pointA, pointB] pairs.
+    """
+    merged_skeleton = []
+    offset = 0  # Initialize offset to adjust keypoints indices for each skeleton
+
+    for skeleton in skeletons:
+        # Adjust each skeleton's keypoints indices by the current offset
+        adjusted_skeleton = [[point[0] + offset, point[1] + offset] for point in skeleton]
+        # Update the merged skeleton
+        merged_skeleton.extend(adjusted_skeleton)
+        # Update the offset for the next skeleton, assuming the last keypoint index in the current skeleton
+        # represents the highest value
+        if skeleton.size > 0:  # Check if skeleton is not empty
+            offset += max(skeleton.max(), 0) + 1  # Adjust offset based on the highest keypoint index in the current skeleton
+
+    return np.array(merged_skeleton)
+

@@ -26,10 +26,10 @@ from lib.algorithms.advanced import utils as mutils
 def get_div_fn(fn):
     """Create the divergence function of `fn` using the Hutchinson-Skilling trace estimator."""
 
-    def div_fn(x, t, eps):
+    def div_fn(x, t, condition, eps):
         with torch.enable_grad():
             x.requires_grad_(True)
-            fn_eps = torch.sum(fn(x, t) * eps)
+            fn_eps = torch.sum(fn(x, t, condition) * eps)
             grad_fn_eps = torch.autograd.grad(fn_eps, x)[0]
         x.requires_grad_(False)
         return torch.sum(grad_fn_eps * eps, dim=tuple(range(1, len(x.shape))))
@@ -56,17 +56,17 @@ def get_likelihood_fn(sde, inverse_scaler, hutchinson_type='Rademacher',
       the latent code, and the number of function evaluations cost by computation.
   """
 
-    def drift_fn(model, x, t):
+    def drift_fn(model, x, t, condition):
         """The drift function of the reverse-time SDE."""
         score_fn = mutils.get_score_fn(sde, model, train=False, continuous=True)
         # Probability flow ODE is a special case of Reverse SDE
         rsde = sde.reverse(score_fn, probability_flow=True)
-        return rsde.sde(x, t, condition=None, mask=None)[0]
+        return rsde.sde(x, t, condition, mask=x.new_ones(x.shape))[0]
 
-    def div_fn(model, x, t, noise):
-        return get_div_fn(lambda xx, tt: drift_fn(model, xx, tt))(x, t, noise)
+    def div_fn(model, x, t, condition, noise):
+        return get_div_fn(lambda xx, tt, cond: drift_fn(model, xx, tt, cond))(x, t, condition, noise)
 
-    def likelihood_fn(model, data):
+    def likelihood_fn(model, data, condition):
         """Compute an unbiased estimate to the log-likelihood in bits/dim.
 
     Args:
@@ -91,8 +91,8 @@ def get_likelihood_fn(sde, inverse_scaler, hutchinson_type='Rademacher',
             def ode_func(t, x):
                 sample = mutils.from_flattened_numpy(x[:-shape[0]], shape).to(data.device).type(torch.float32)
                 vec_t = torch.ones(sample.shape[0], device=sample.device) * t
-                drift = mutils.to_flattened_numpy(drift_fn(model, sample, vec_t))
-                logp_grad = mutils.to_flattened_numpy(div_fn(model, sample, vec_t, epsilon))
+                drift = mutils.to_flattened_numpy(drift_fn(model, sample, vec_t, condition))
+                logp_grad = mutils.to_flattened_numpy(div_fn(model, sample, vec_t, condition, epsilon))
                 return np.concatenate([drift, logp_grad], axis=0)
 
             init = np.concatenate([mutils.to_flattened_numpy(data), np.zeros((shape[0],))], axis=0)

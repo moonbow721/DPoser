@@ -21,9 +21,8 @@ import torch
 import torch.optim as optim
 from torch import nn
 
-from lib.dataset.AMASS import N_POSES
-from lib.utils.misc import linear_interpolation
-from lib.utils.transforms import rot6d_to_axis_angle
+from lib.utils.misc import lerp, create_random_mask
+
 from . import utils as mutils
 from .sde_lib import VESDE, VPSDE
 
@@ -31,9 +30,14 @@ from .sde_lib import VESDE, VPSDE
 def get_optimizer(config, params):
     """Returns a flax optimizer object based on `config`."""
     if config.optim.optimizer == 'Adam':
-        # default decay=0, lr=2e-4, beta1=0.9, same as my setting
         optimizer = optim.Adam(params, lr=config.optim.lr, betas=(config.optim.beta1, 0.999), eps=config.optim.eps,
                                weight_decay=config.optim.weight_decay)
+    elif config.optim.optimizer == 'AdamW':
+        optimizer = optim.AdamW(params,
+                                lr=config.optim.lr,
+                                betas=(config.optim.beta1, 0.98),
+                                eps=config.optim.eps,
+                                weight_decay=config.optim.weight_decay)
     else:
         raise NotImplementedError(
             f'Optimizer {config.optim.optimizer} not supported yet!')
@@ -59,7 +63,8 @@ def optimization_manager(config):
 
 
 def get_sde_loss_fn(sde, train, reduce_mean=False, continuous=True, likelihood_weighting=False, eps=1e-5,
-                    return_data=False, denoise_steps=5):
+                    return_data=False, denoise_steps=5,
+                    random_mask=False, min_mask_rate=0.2, max_mask_rate=0.4, observation_type='noise'):
     """Create a loss function for training with arbirary SDEs.
 
   Args:
@@ -89,7 +94,7 @@ def get_sde_loss_fn(sde, train, reduce_mean=False, continuous=True, likelihood_w
       loss: A scalar that represents the average loss value across the mini-batch.
     """
         def multi_step_denoise(x_t, t, t_end, N=10):
-            time_traj = linear_interpolation(t, t_end, N + 1)
+            time_traj = lerp(t, t_end, N + 1)
             x_current = x_t
             for i in range(N):
                 t_current = time_traj[i]
@@ -109,8 +114,16 @@ def get_sde_loss_fn(sde, train, reduce_mean=False, continuous=True, likelihood_w
         # prior t0 --> sde.T
         t = torch.rand(batch.shape[0], device=batch.device) * (sde.T - eps) + eps  # [B]
         z = torch.randn_like(batch)  # [B, j*3]
+
+        if random_mask:
+        # apply random mask to batch
+            mask, batch = create_random_mask(batch, min_mask_rate, max_mask_rate, observation_type)
+        else:
+            mask = torch.ones_like(batch)
+
         mean, std = sde.marginal_prob(batch, t)
         perturbed_data = mean + std[:, None] * z  # [B, j*3]
+        # score = score_fn(perturbed_data, t, condition, mask)
 
         if return_data:
             # return estimated clean sample for auxiliary loss
@@ -120,6 +133,7 @@ def get_sde_loss_fn(sde, train, reduce_mean=False, continuous=True, likelihood_w
         else:
             score = score_fn(perturbed_data, t, condition, mask)
 
+        # Apply mask: * mask
         if not likelihood_weighting:
             losses = torch.square(score * std[:, None] + z)  # [B, j*3]
             losses = reduce_op(losses.reshape(losses.shape[0], -1), dim=-1)  # [B]
@@ -185,8 +199,8 @@ def get_ddpm_loss_fn(vpsde, train, reduce_mean=True):
 
 
 def get_step_fn(sde, train, optimize_fn=None, reduce_mean=False, continuous=True,
-                likelihood_weighting=False, auxiliary_loss=False,
-                denormalize=None, body_model=None, rot_rep='rot6d', denoise_steps=5):
+                likelihood_weighting=False, auxiliary_loss=False, random_mask=False,
+                denormalize=None, body_model=None, model_type='body', **kwargs):
     """Create a one-step training/evaluation function.
 
   Args:
@@ -203,7 +217,7 @@ def get_step_fn(sde, train, optimize_fn=None, reduce_mean=False, continuous=True
     if continuous:
         loss_fn = get_sde_loss_fn(sde, train, reduce_mean=reduce_mean,
                                   continuous=True, likelihood_weighting=likelihood_weighting,
-                                  return_data=auxiliary_loss, denoise_steps=denoise_steps)
+                                  return_data=auxiliary_loss, random_mask=random_mask, **kwargs)
     else:
         assert not likelihood_weighting, "Likelihood weighting is not supported for original SMLD/DDPM training."
         if isinstance(sde, VESDE):
@@ -216,60 +230,55 @@ def get_step_fn(sde, train, optimize_fn=None, reduce_mean=False, continuous=True
         assert denormalize is not None and body_model is not None
 
     l2_loss = nn.MSELoss(reduction='none')
+    model_type_to_param = {
+        'body': 'body_pose',
+        'hand': 'hand_pose',
+        'face': 'face_params',
+        'whole-body': 'whole_body_params',
+    }
+    param = model_type_to_param.get(model_type)
+    if param is None:
+        raise ValueError(f"model_type {model_type} is not supported.")
 
-    def step_fn(state, batch, condition=None, mask=None):
+    def step_fn(model, batch, condition=None, mask=None):
         """Running one step of training or evaluation.
 
     This function will undergo `jax.lax.scan` so that multiple steps can be pmapped and jit-compiled together
     for faster execution.
 
     Args:
-      state: A dictionary of training information, containing the score model, optimizer,
-       EMA status, and number of optimization steps.
-      batch: A mini-batch of training/evaluation data.
+      model: the score model
+      batch: A mini-batch of training/evaluation data. (torch.Tensor)
 
     Returns:
       loss: The average loss value of this state.
     """
-        model = state['model']
         if train:
-            optimizer = state['optimizer']
-            optimizer.zero_grad()
             # basic diffusion loss
             if not auxiliary_loss:
                 loss = loss_fn(model, batch, condition, mask)
-                loss_dict = {'step_loss': loss, 'score_loss': loss}
+                loss_dict = {'loss': loss, 'score_loss': loss}
             # auxiliary loss
             else:
                 score_loss, data = loss_fn(model, batch, condition, mask)
                 weight = torch.log(1.0 + data['SNR'])  # [b, 1]
                 # weight = 1.0
-                estimate = denormalize(data['clean_sample'])
-                batch = denormalize(batch)
-                if rot_rep == 'rot6d':
-                    estimate = rot6d_to_axis_angle(estimate.reshape(-1, 6)).reshape(-1, N_POSES * 3)
-                    batch = rot6d_to_axis_angle(batch.reshape(-1, 6)).reshape(-1, N_POSES * 3)
+                estimate = denormalize(data['clean_sample'], to_axis=True)
+                batch = denormalize(batch, to_axis=True)
                 # The bottleneck of training, it costs 10 times slower than multi-step denoising (even 10steps)
-                gt_body = body_model(pose_body=batch)
-                pred_body = body_model(pose_body=estimate)
+                gt_body = body_model(**{param: batch})
+                pred_body = body_model(**{param: estimate})
                 loss_v2v = torch.mean(weight * l2_loss(gt_body.v, pred_body.v).sum(dim=-1))     # sum along x-y-z
                 loss_j2j = torch.mean(weight * l2_loss(gt_body.Jtr, pred_body.Jtr).sum(dim=-1))     # sum along x-y-z
                 loss = score_loss + loss_v2v + loss_j2j
-                loss_dict = {'step_loss': loss, 'score_loss': score_loss, 'v2v_loss': loss_v2v, 'j2j_loss': loss_j2j}
+                loss_dict = {'loss': loss, 'score_loss': score_loss, 'v2v_loss': loss_v2v, 'j2j_loss': loss_j2j}
 
-            loss.backward()
-            optimize_fn(optimizer, model.parameters(), step=state['step'])
-            state['step'] += 1
-            state['ema'].update(model.parameters())
         else:
             with torch.no_grad():
-                ema = state['ema']
-                ema.store(model.parameters())
-                ema.copy_to(model.parameters())
                 loss = loss_fn(model, batch, condition, mask)
-                ema.restore(model.parameters())
-                loss_dict = {'step_loss': loss, 'score_loss': loss}
+                loss_dict = {'loss': loss, 'score_loss': loss}
 
         return loss_dict
+
 
     return step_fn

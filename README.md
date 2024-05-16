@@ -2,7 +2,7 @@
 
 ### [🔗 Project Page](https://dposer.github.io/) | [🎥 Video](https://youtu.be/tbi8nwTaV3M) | [📄 Paper](https://arxiv.org/abs/2312.05541)
 #### Authors
-[Junzhe Lu](https://scholar.google.com/citations?user=hnJ4NIYAAAAJ), [Jing Lin](https://jinglin7.github.io), [Hongkun Dou](https://scholar.google.com/citations?user=pSNEkEwAAAAJ), [Yulun Zhang](https://yulunzhang.com/), [Yue Deng](https://shi.buaa.edu.cn/yuedeng/en/index.htm), [Haoqian Wang](https://www.sigs.tsinghua.edu.cn/whq_en/main.htm)  
+[Junzhe Lu](https://scholar.google.com/citations?user=hnJ4NIYAAAAJ), [Jing Lin](https://jinglin7.github.io), [Hongkun Dou](https://scholar.google.com/citations?user=pSNEkEwAAAAJ), [Ailing Zeng](https://ailingzeng.site/), [Yue Deng](https://shi.buaa.edu.cn/yuedeng/en/index.htm), [Yulun Zhang](https://yulunzhang.com/), [Haoqian Wang](https://www.sigs.tsinghua.edu.cn/whq_en/main.htm)  
 
 <p align="center">
 <img src="assets/overview.png" width="1000">
@@ -32,7 +32,7 @@ We use the [SMPLX](https://smpl-x.is.tue.mpg.de/) body model in our experiments.
 
 ## 🚀 3. Quick Demo
 
-* **Pre-trained Model**: Grab the pre-trained DPoser model from [here](https://drive.google.com/drive/folders/1hZTF9-WNCz8Wie3LRVdP_3sXTGZle5gN?usp=sharing) and place it in `./pretrained_models`.
+* **Pre-trained Model**: Grab the pre-trained DPoser model from [here](https://drive.google.com/drive/folders/1kJhWZ6m7lWkK9W--gZPa7ibAOAec4ei2?usp=drive_link) and place it in `./pretrained_models`.
 
 * **Sample Data**: Check out `./examples` for some sample files, including 500 body poses from the AMASS dataset and a motion sequence fragment.
 
@@ -41,33 +41,33 @@ We use the [SMPLX](https://smpl-x.is.tue.mpg.de/) body model in our experiments.
 ### 🎭 Pose Generation
 Generate poses and save rendered images:
   ```shell
-  python -m run.demo --config configs/subvp/amass_scorefc_continuous.py  --task generation
+  python -m run.tester.body.demo --config configs/body/subvp/timefc.py  --task generation
   ```
 For videos of the generation process:
   ```shell
-  python -m run.demo --config configs/subvp/amass_scorefc_continuous.py  --task generation_process
+  python -m run.tester.body.demo --config configs/body/subvp/timefc.py  --task generation_process
   ```
 
 ### 🧩 Pose Completion
 Complete poses and view results:
   ```shell
-  python -m run.demo --config configs/subvp/amass_scorefc_continuous.py  --task completion --hypo 10 --part right_arm --view right_half
+  python -m run.tester.body.demo --config configs/body/subvp/timefc.py  --task completion --hypo 10 --part right_arm --view right_half
   ```
 Explore other solvers like [ScoreSDE](https://github.com/yang-song/score_sde_pytorch) for our DPoser prior:
   ```shell
-  python -m run.demo --config configs/subvp/amass_scorefc_continuous.py  --task completion2 --hypo 10 --part right_arm --view right_half
+  python -m run.tester.body.demo --config configs/body/subvp/timefc.py  --task completion --mode ScoreSDE --hypo 10 --part right_arm --view right_half
   ```
 
 ### 🌪️ Motion Denoising
 Summarize visual results in a video:
   ```shell
-  python -m run.motion_denoising --config configs/subvp/amass_scorefc_continuous.py --file-path ./examples/Gestures_3_poses_batch005.npz --noise-std 0.04
+  python -m run.tester.body.motion_denoising --config configs/body/subvp/timefc.py --file-path ./examples/Gestures_3_poses_batch005.npz --noise-std 0.04
   ```
 
 ### 🕺 Human Mesh Recovery
-Use the detected 2D keypoints from [openpose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) and save fitting results:
+Use the detected 2D keypoints from [ViTPose](https://github.com/ViTAE-Transformer/ViTPose) and save fitting results:
   ```shell
-  python -m run.demo_fit --img=./examples/image_00077.jpg --openpose=./examples/image_00077_keypoints.json
+  python -m run.tester.body.demo_fit --img ./examples/body/images/01_img.jpg --kpt_path ./examples/body/predictions/01_img.json
   ```
 
 
@@ -101,23 +101,24 @@ To train DPoser, we use the [AMASS](https://amass.is.tue.mpg.de/) dataset. You h
 ### 🏋️‍♂️ Start Training
 After setting up your dataset, begin training DPoser:
   ```shell
-  python -m run.train --config configs/subvp/amass_scorefc_continuous.py --name reproduce
+  python -m run.trainer.body.diffusion --config configs/body/subvp/timefc.py --name reproduce
   ```
-This command will start the training process. The checkpoints, TensorBoard logs, and validation visualization results will be stored under `./output/amass_amass`.
+This command will start the training process. The checkpoints and TensorBoard logs will be stored under `./checkpoints` and `./logs` separately.
 
 ## 🧪 5. Test DPoser
 
 ### Pose Generation
-Quantitatively evaluate 500 generated samples using this script:
+Quantitatively evaluate the generated samples using this script:
   ```shell
-  python -m run.demo --config configs/subvp/amass_scorefc_continuous.py  --task generation --metrics
+  python -m run.tester.body.demo --config configs/body/subvp/timefc.py --task eval_generation
   ```
-This will use the [SMPL](https://smpl.is.tue.mpg.de/) body model to evaluate APD and SI following [Pose-NDF](https://github.com/garvita-tiwari/PoseNDF).
+This will use the [SMPL](https://smpl.is.tue.mpg.de/) body model to evaluate APD and SI for 500 samples following [Pose-NDF](https://github.com/garvita-tiwari/PoseNDF).
+Additionally, we evaluate the common metrics like [FID](https://github.com/mseitzer/pytorch-fid), [Precision, Recall](https://github.com/kynkaat/improved-precision-and-recall-metric) for 50000 samples.
 
 ### Pose Completion
 For testing on the AMASS dataset (make sure you've completed the dataset preparation in Step 4):
   ```shell
-  python -m run.completion --config configs/subvp/amass_scorefc_continuous.py --gpus 1 --hypo 10 --sample 10 --part legs
+  python -m run.tester.body.completion --config configs/body/subvp/timefc.py --gpus 1 --hypo 10 --sample 10 --part legs
   ```
 
 ### Motion Denoising
@@ -125,21 +126,50 @@ To evaluate motion denoising on the AMASS dataset, use the following steps:
 
 - Split the `HumanEva` part of the AMASS dataset into fragments using this script:
   ```shell
-  python lib/dataset/HumanEva.py --input-dir path_to_HumanEva --output-dir ./data/HumanEva_60frame  --seq-len 60
+  python lib/data/body_process/HumanEva.py --input-dir path_to_HumanEva --output-dir ./data/HumanEva_60frame  --seq-len 60
   ```
 - Then, run this script to evaluate the motion denoising task on all sub-sequences in the `data-dir`:
   ```shell
-  python -m run.motion_denoising --config configs/subvp/amass_scorefc_continuous.py --data-dir ./data/HumanEva_60frame --noise-std 0.04
+  python -m run.tester.body.motion_denoising --config configs/body/subvp/timefc.py --data-dir ./data/HumanEva_60frame --noise-std 0.04
   ```
-
+- Alternatively, run the denoising task with partial visible joints:
+  ```shell
+  python -m run.tester.body.motion_denoising_partial --config configs/body/subvp/timefc.py --data-dir ./data/HumanEva_60frame --part left_arm
+  ```  
+  
 ### Human Mesh Recovery
 To test on the EHF dataset, follow these steps:
 
 - First, download the EHF dataset from [SMPLX](https://smpl-x.is.tue.mpg.de/).
+- Next, detect the 2d keypoints using [ViTPose](https://github.com/ViTAE-Transformer/ViTPose).
+  Ensure you follow this directory structure:
+  ```
+  ${EHF_ROOT}
+  .
+  |-- 01_align.ply
+  |-- 01_img.jpg
+  |-- 01_img.png
+  |-- 01_scan.obj
+  ...
+  |-- vitpose_keypoints
+      |-- predictions
+            |-- 01_img.json
+            |-- 02_img.json
+            ...
+    ```
+  
 - Specify the `--data-dir` and run this script:
   ```shell
-  python -m run.fitting --config configs/subvp/amass_scorefc_continuous.py --data-dir path_to_EHF --outdir ./fitting_results
+  python -m run.tester.body.EHF --data_dir=path_to_EHF --outdir=./lifting_results --prior DPoser --kpts vitpose
   ```
+
+## 📊 Implementation of other pose priors
+- You can explore other pose priors like [GMM](https://github.com/githubcrj/simplify), [VPoser](https://github.com/nghorbani/human_body_prior), [PoseNDF](https://github.com/garvita-tiwari/PoseNDF), [GAN-S](https://github.com/cvlab-epfl/adv_param_pose_prior) in our repo.
+  
+  We have provided the implementation of them in the `other_priors` folder for tasks like pose generation, completion, human mesh recovery and motion denoising.
+  Note that you should download the pre-trained models from the original repositories first. (For GAN-S, you may need to train the model yourself.)
+
+- For human mesh recovery, you can directly set the `--prior` parameter to one of `'DPoser', 'VPoser', 'GMM', 'Posendf', 'None'` in the `run.tester.body.demo_fit` and `run.tester.body.EHF` scripts.
 
 ## ❓ Troubleshoots
 
@@ -155,7 +185,7 @@ Big thanks to [ScoreSDE](https://github.com/yang-song/score_sde_pytorch), [GFPos
 ```
 @article{lu2023dposer,
   title={DPoser: Diffusion Model as Robust 3D Human Pose Prior},
-  author={Lu, Junzhe and Lin, Jing and Dou, Hongkun and Zhang, Yulun and Deng, Yue and Wang, Haoqian},
+  author={Lu, Junzhe and Lin, Jing and Dou, Hongkun and Zeng, Ailing and Deng, Yue and Zhang, Yulun and Wang, Haoqian},
   journal={arXiv preprint arXiv:2312.05541},
   year={2023}
 }

@@ -133,8 +133,9 @@ def bbox_from_detector(bbox, rescale=1.1):
     scale *= rescale
     return center, scale
 
-def compute_bbox(json_data):
-    all_keypoints = [np.array(person['pose_keypoints_2d']).reshape(-1, 3) for person in json_data['people']]
+
+def compute_bbox(keypoints_list):
+    all_keypoints = keypoints_list
     bbox_list = []
 
     for batch_id, keypoints in enumerate(all_keypoints):
@@ -157,6 +158,7 @@ def compute_bbox(json_data):
 
     bbox_array = np.array(bbox_list)
     return bbox_array
+
 
 def process_image(orig_img_rgb, bbox,
                   crop_height=constants.CROP_IMG_HEIGHT,

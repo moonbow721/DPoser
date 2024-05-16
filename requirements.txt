@@ -16,3 +16,5 @@ pyglet
 pymeshlab
 pyrender
 trimesh
+pytorch-lightning
+pytorch3d

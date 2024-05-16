@@ -4,6 +4,8 @@
 # from __future__ import unicode_literals
 
 import torch
+from typing import Iterator
+from torch import Tensor, nn
 
 
 # Partially based on: https://github.com/tensorflow/tensorflow/blob/r1.13/tensorflow/python/training/moving_averages.py
@@ -12,7 +14,7 @@ class ExponentialMovingAverage:
   Maintains (exponential) moving average of a set of parameters.
   """
 
-    def __init__(self, parameters, decay=0.999, use_num_updates=True):
+    def __init__(self, parameters, decay=0.999, use_num_updates=True, device=None):
         """
     Args:
       parameters: Iterable of `torch.nn.Parameter`; usually the result of
@@ -25,8 +27,12 @@ class ExponentialMovingAverage:
             raise ValueError('Decay must be between 0 and 1')
         self.decay = decay
         self.num_updates = 0 if use_num_updates else None
-        self.shadow_params = [p.clone().detach()
-                              for p in parameters if p.requires_grad]
+        if device is not None:
+            self.shadow_params = [p.clone().detach().to(device)
+                                  for p in parameters if p.requires_grad]
+        else:
+            self.shadow_params = [p.clone().detach()
+                                  for p in parameters if p.requires_grad]
         self.collected_params = []
 
     def update(self, parameters):
@@ -96,3 +102,44 @@ class ExponentialMovingAverage:
         self.decay = state_dict['decay']
         self.num_updates = state_dict['num_updates']
         self.shadow_params = state_dict['shadow_params']
+
+
+def _update_ema_weights(
+        ema_weight_iter: Iterator[Tensor],
+        online_weight_iter: Iterator[Tensor],
+        ema_decay_rate: float,
+) -> None:
+    for ema_weight, online_weight in zip(ema_weight_iter, online_weight_iter):
+        if ema_weight.data is None:
+            ema_weight.data.copy_(online_weight.data)
+        else:
+            ema_weight.data.lerp_(online_weight.data, 1.0 - ema_decay_rate)
+
+
+def update_ema_model(
+        ema_model: nn.Module, online_model: nn.Module, ema_decay_rate: float
+) -> nn.Module:
+    """Updates weights of a moving average model with an online/source model.
+
+  Parameters
+  ----------
+  ema_model : nn.Module
+      Moving average model.
+  online_model : nn.Module
+      Online or source model.
+  ema_decay_rate : float
+      Parameter that controls by how much the moving average weights are changed.
+
+  Returns
+  -------
+  nn.Module
+      Updated moving average model.
+  """
+    # Update parameters
+    _update_ema_weights(
+        ema_model.parameters(), online_model.parameters(), ema_decay_rate
+    )
+    # Update buffers
+    _update_ema_weights(ema_model.buffers(), online_model.buffers(), ema_decay_rate)
+
+    return ema_model

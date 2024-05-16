@@ -11,8 +11,9 @@ import os
 from os.path import join
 
 curr_dir = os.path.dirname(os.path.abspath(__file__))
-SMPL_MEAN_PATH = join(curr_dir, './smpl_mean_params.npz')
+SMPL_MEAN_PATH = join(curr_dir, '../data/smpl_mean_params.npz')
 BEND_POSE_PATH = join(curr_dir, '../data/bend_pose.npz')
+GMM_WEIGHTS_DIR = join(curr_dir, '../data')
 
 CROP_IMG_HEIGHT = 256
 CROP_IMG_WIDTH = 192
