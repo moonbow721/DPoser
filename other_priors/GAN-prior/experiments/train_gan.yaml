@@ -1,0 +1,82 @@
+GPUS : '0' # string of gpu indices, comma-separated
+PRINT_FREQ : 200 # how often to print loss status
+SAVE_EVERY_EPOCH : 20 # how often to save checkpoints
+
+OUTPUT_DIR : './output/ganS' # folder to save results (will be created if does not exist)
+SMPL_PATH: './data/smpl_neutral_lbs_10_207_0_v1.0.0.pkl' # path to SMPL model
+
+MODELS : # dict of models to use
+  generator :
+    DIR : 'gan'
+    ARCH : 'Generator'
+    PARAMS : 
+      latentD : 32
+      num_joints : 21
+  discriminator : 
+    DIR : 'gan'
+    ARCH : 'Discriminator'
+    PARAMS:
+      num_joints : 21
+      hidden_poseall : 64
+      poseall_num_layers : 2
+
+LOSSES : # dict of losses to use
+  # training losses
+  gen_loss : 
+    DIR : 'vanilla_gan'
+    NAME : 'dummyloss' # there is no speicific class for "gen_loss" but we like to keep the name for tracking
+  dis_loss : 
+    DIR : 'vanilla_gan'
+    NAME : 'DiscrLoss' 
+    PARAMS :
+      shape_w : 0.
+      poseeach_w : 21
+      poseall_w : 1
+      poseshape_w : 0.
+
+OPTIM : # dict of optimizers to use
+  generator :
+    NAME : 'Adam'
+    PARAMS :
+      lr : 0.0002
+      betas : [0.5, 0.999]
+  discriminator :
+    NAME : 'Adam'
+    PARAMS :
+      lr : 0.0002
+      betas : [0.5, 0.999]
+
+DATASETS : # dict of datasets to use
+  train :
+    DIR : 'amass'
+    NAME : 'AMASS'
+    PARAMS :
+      mode : 'train'
+      num_betas: 10
+      num_joints : 21
+      path_to_dataset : './data/amass/'
+
+DATALOAD : # dict of dataloaders to use (must have same names as datasets)
+  train :
+    NUM_ITERATIONS_PER_EPOCH : 1_000 # 1 epoch == # of iterations, not run over whole dataset
+    PARAMS :
+      shuffle : True
+      batch_size : 1024
+      num_workers : 10
+
+TRAINING : 
+  END_EPOCH : 300
+
+PROCEDURE : 'train_gan' # file lib/procedures/procedures/<PROCEDURE>.py with "train" and "valid" functions
+
+EXP_NAME : 'gan_S_amass' # name of the experiment
+
+LATENT_SPACE_DIM : 32
+LATENT_SPACE_TYPE : 'S' # 'U' - Uniform [-1,1], 'S' - Uniform (unit sphere), 'N' - Normal
+
+NUM_GEN_STEPS : 1 
+NUM_DIS_STEPS : 10
+
+valid_first : True
+
+SAVEALLITERS : True # save losses at all iterations
