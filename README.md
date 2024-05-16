@@ -15,6 +15,14 @@
 Welcome to the official implementation of *DPoser: Diffusion Model as Robust 3D Human Pose Prior.* 🚀  
 In this repository, we're excited to introduce DPoser, a robust 3D human pose prior leveraging diffusion models. DPoser is designed to enhance various pose-centric applications like human mesh recovery, pose completion, and motion denoising. Let's dive in!
 
+## 🔄 **Switch to the 'v2' Branch for Enhanced Features!**
+
+We highly recommend switching to the 'v2' branch, which supports additional pose priors and features cleaner, more structured code. To switch, use the following command:
+
+```bash
+git checkout v2
+```
+
 ## 🛠️ 2. Setup Your Environment 
 
 - **Tested Configuration**: Our code works great on PyTorch 1.12.1 with CUDA 11.3.
